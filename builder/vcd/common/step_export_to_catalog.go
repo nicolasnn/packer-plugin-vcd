@@ -178,31 +178,26 @@ func (s *StepExportToCatalog) Run(_ context.Context, state multistep.StateBag) m
 		}
 	}
 
-	// Power off vApp (needed for capture of GPU vApp)
-	ui.Sayf("Nicolas DEBUG: Powering off vApp")
-	status, err := vapp.GetStatus()
+	// Power off vApp (required for capture of GPU vApp)
+	ui.Sayf("Powering off (undeploy) vApp")
+	vappRef := vapp.(*govcd.VApp)
+	status, err := vappRef.GetStatus()
 	if err != nil {
-		fmt.Printf("  Error getting vApp status: %v\n", err)
-	} else {
-		fmt.Printf("  Current status: %s\n", status)
-	}
+		state.Put("error", fmt.Errorf("  Error getting vApp status: %v", err))
+	} 
 
 	if status != "POWERED_OFF" && status != "RESOLVED" {
-		fmt.Printf("  Powering off vApp...\n")
-		task, err := vapp.PowerOff()
+		task, err := vappRef.Undeploy()
 		if err != nil {
-			fmt.Printf("  Note: power off returned: %v\n", err)
+			state.Put("error", fmt.Errorf("  Note: undeploy returned: %v", err))
 		} else {
 			if err := task.WaitTaskCompletion(); err != nil {
-				fmt.Printf("  Error waiting for power off: %v\n", err)
-			} else {
-				fmt.Printf("  Powered off.\n")
-			}
+				state.Put("error", fmt.Errorf("  Error waiting for shutdown: %v", err))
+			} 
 		}
 	}
 
 	// Create vApp template from vApp
-	vappRef := vapp.(*govcd.VApp)
 	description := s.Config.Description
 	if description == "" {
 		description = fmt.Sprintf("Packer-built template from %s", vappRef.VApp.Name)
